@@ -1,0 +1,158 @@
+---
+title: "Assignment 1"
+author: "Harry Xu"
+date: '2018-01-16'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tseries)
+
+```
+
+## Question 1:
+
+#####a) 
+First we create a time-series object for the maximum monthly temperature. After plotting this time-series data, the series appear to be **not stationary** due to the presence of seasonality, as there is a clear periodicity for roughly 1 year (12 months). Also, the correlogram shows a clear pattern which indicates seasonality. We can't see an obvious trend, and the seasonal variation seems to be steady, and does not increase with the mean, thereofore an **additive** model would be the most suitable.
+
+```{r}
+
+bradtemp <- read.csv("bradforddata.csv", header = T) 
+tsbrad <- ts(bradtemp$Max.Temp, start = c(1930, 1), frequency = 12)
+plot.ts(tsbrad,
+        main = "Max Monthly Temperature from Jan 1930 to Dec 2017",
+        xlab = "Date",
+        ylab = "Max Temperature (Celsius)")
+abline(h=mean(tsbrad), col = "red") #this is the mean
+
+acf(tsbrad) #correlogram for Max Monthly Temperature
+
+```
+
+#####b)
+Split data into training set (Jan 1950 - Dec 2014) and test set (Jan 2015 - Dec 2017):
+```{r}
+training <- window(tsbrad, start=c(1950,1), end =c(2014,12))
+test <- window(tsbrad, start=c(2015,1), end =c(2017,12))
+
+```
+Moving Average Smoothing Method and its decomposition plot:
+```{r}
+movingavg <- decompose(training, type = c("additive"))
+#movingavg$figure is the estimated seasonal effects
+plot(movingavg)
+```
+
+Loess Method and its decomposition plot:
+```{r}
+loessmeth <- stl(training, s.window = "periodic")
+plot(loessmeth, main = "Loess Smoothing")
+```
+
+#####c)
+Fitting a linear model for each methods and predict the maximum monthly temperatures for all months in 2015 through 2017 using the test data set:
+
+```{r}
+#lm for moving avg:
+timeframe <- 1:(12*(2014-1950+1)) #this is a list representing month number from 1 to 780 (Jan 1950 - Dec 2014)
+matrend <- movingavg$trend
+(summary(linmod <- lm(matrend~timeframe)))
+
+#lm for loess:
+lodata <- loessmeth$time.series
+lotrend <- lodata[,2]
+loseason <- lodata[,1]
+(summary(lomod <- lm(lotrend~timeframe)))
+
+#Predictions for moving avg and loess:
+predtime <- data.frame(781:816) #predicting time month number from Jan 2015 - Dec 2017
+names(predtime) = "timeframe"
+
+mvpred <- predict(linmod, newdata = predtime) + movingavg$figure[rep(1:12, 3)] 
+lopredict <- predict(lomod, newdata = predtime) + loseason[rep(1:12, 3)]
+
+tsmvpred <- ts(mvpred, start=c(2015,1), frequency = 12 )
+tslopredict <- ts(lopredict, start=c(2015,1), frequency = 12 )
+```
+
+1) MSPE for moving average smoothing:
+```{r}
+(MSPEmv <- mean((mvpred - test)^2))
+```
+2) MSPE for loess smoothing:
+```{r}
+(MSPELo <- mean((lopredict - test)^2))
+```
+
+Now, we can plot the predicted values (red for moving average, and blue for loess), against the test set(black):
+```{r}
+plot.ts(test)
+lines(tsmvpred, col = "red")
+lines(tslopredict, col = "blue")
+```
+
+**Findings**: the two predictions are very similar to each other as shown from the plot, and the MSPE are both pretty small and roughly the same, around 1.46.
+
+#####d)
+The prediction assuming **no trend** is present has a much larger MSPE of 4.96 and is shown in green:
+```{r}
+notrend <- lm(matrend~1)
+nontrendpred <- ts(notrend$coefficients + movingavg$figure[rep(1:12, 3)], start=c(2015,1), frequency = 12)
+plot.ts(test)
+lines(tsmvpred, col = "red")
+lines(tslopredict, col = "blue")
+lines(nontrendpred, col = "green")
+(MSPENT <- mean((nontrendpred - test)^2)) #MSPE for no trend estimate
+
+```
+The test prediction for removing the linear trend yields a **worse** result than having it, also since the slope of both linear models are significant and positive, we can say that there is some evidence that the maximum monthly temperature is increasing linearly over the years. 
+
+## Question 2:
+
+#####a) 
+```{r}
+library(zoo)
+weather <- read.csv("histWeather.csv", header = T)
+dat <- subset(weather, weather$AirPtCd == "KAVP")
+```
+
+#####b) 
+Here we create zoo objects for **daily** and **monthly** Max Temperature, and Mean Wind Speed, and plot the time series:
+```{r}
+#Daily max temp and mean wind speed:
+zoodailymaT <- zoo(dat$Max_TemperatureF, as.Date(dat$Date))
+zoodailymeanW <- zoo(dat$Mean_Wind_SpeedMPH, as.Date(dat$Date))
+#Monthly mean max temp and mean wind speed:
+zoomonmaT <-aggregate(zoodailymaT, as.yearmon, mean)
+zoomonmeanW <- aggregate(zoodailymeanW, as.yearmon, mean)
+
+```
+
+Plot 1. The plot below shows the **daily Max Temperature**, the series fluctuates daily, but it has a general periodic pattern per year. Since there is a seaonality, with a seasonal variation of 1 year, so the time series are **not stationary**. There is no clear trend present, therefore an **additive model** would be suitable in this case.
+```{r}
+plot(zoodailymaT, col = "black", main = "Plot 1: Daily Max Temp(F)")
+```
+
+Plot 2. The plot below shows the **daily Mean Wind Speed**, but it has a general seasonal variation that has a periodic pattern per year, so the time series are **not stationary**. There is not a clear trend present, therefore an **additive model** would be suitable in this case.
+```{r}
+plot(zoodailymeanW, col = "hot pink", main = "Plot 2: Daily Mean Wind Speed")
+```
+
+Plot 3. The plot below shows the **monthly mean for Max Temperature**, there is a clear seasonal variation shown per year, so the time series are **not stationary**. There is no clear trend, therefore an **additive model** would be suitable in this case.
+```{r}
+plot(zoomonmaT, col = "black", main = "Plot 3: Monthly Mean Max Temp(F)")
+```
+
+Plot 4. The plot below shows the **monthly mean for Mean Wind Speed**, there is no clear seasonal variation shown per year, although a faily weak yearly cycle can be seen. The time series are somewhat **stationary**. There is not a clear trend present either, therefore an **additive model** would be suitable in this case.
+```{r}
+plot(zoomonmeanW, col = "hot pink", main = "Plot 4: Monthly Mean Mean Wind Speed")
+
+```
+
+
+#####c) 
+
+The monthly data series have only 1 onservation for the month of September 2017, this is not acceptibable when we calculate monthly related statistics, since the mean of the whole month will then be represented by this single day, which may affect the model and prediction overall. If we were to model the time series daily, then it will be fine. 

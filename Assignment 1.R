@@ -1,10 +1,13 @@
 setwd("~/Desktop/STAT 443/Webwork and HW/Assignment 1")
+library(tseries)
 bradtemp <- read.csv("bradforddata.csv", header = T) 
 tsbrad <- ts(bradtemp$Max.Temp, start = c(1930, 1), frequency = 12)
 plot.ts(tsbrad,
         main = "Max Monthly Temperature from Jan 1930 to Dec 2017",
         xlab = "Date",
         ylab = "Max Temperature (Celsius)")
+abline(h=mean(tsbrad), col = "red")
+acf(tsbrad)
 
 
 training <- window(tsbrad, start=c(1950,1), end =c(2014,12))
@@ -54,6 +57,8 @@ lines(tslopredict, col = "blue")
 
 nontrendpred <- ts(linmod$coefficients[1] + movingavg$figure[rep(1:12, 3)], start=c(2015,1), frequency = 12)
 lines(nontrendpred, col = "green")
+notrend <- lm(matrend~1)
+notrend$coefficients
 
 MSPENT <- mean((nontrendpred - test)^2)
 print(MSPENT)
